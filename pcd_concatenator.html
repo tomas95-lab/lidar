@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PCD Frame Concatenator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface-2: #242836;
+      --border: #2e3345;
+      --text: #e4e6f0;
+      --text-muted: #8b8fa3;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --car-color: #3b82f6;
+      --truck-color: #f59e0b;
+      --ped-color: #22c55e;
+      --other-color: #a855f7;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+
+    header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+
+    header .badge {
+      background: var(--accent);
+      color: white;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .main-layout { display: flex; flex: 1; overflow: hidden; }
+
+    .sidebar {
+      width: 380px;
+      min-width: 380px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-section {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-section h2 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .drop-zone {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 24px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: var(--surface-2);
+    }
+
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(99, 102, 241, 0.08);
+    }
+
+    .drop-zone .icon { font-size: 32px; margin-bottom: 8px; opacity: 0.6; }
+    .drop-zone p { font-size: 14px; color: var(--text-muted); }
+    .drop-zone .hint { font-size: 12px; color: var(--text-muted); opacity: 0.6; margin-top: 4px; }
+
+    input[type="file"] { display: none; }
+
+    .frame-list { flex: 1; overflow-y: auto; padding: 8px; }
+
+    .frame-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--surface-2);
+      margin-bottom: 6px;
+      cursor: grab;
+      transition: all 0.15s;
+      border: 1px solid transparent;
+    }
+
+    .frame-item:hover { border-color: var(--border); }
+    .frame-item.active { border-color: var(--accent); background: rgba(99, 102, 241, 0.1); }
+    .frame-item.dragging { opacity: 0.4; }
+
+    .frame-item .drag-handle { color: var(--text-muted); font-size: 14px; cursor: grab; user-select: none; }
+
+    .frame-item .frame-info { flex: 1; min-width: 0; }
+
+    .frame-item .frame-name {
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .frame-item .frame-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    .frame-item .frame-index {
+      background: var(--accent);
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .frame-item .remove-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      font-size: 16px;
+      line-height: 1;
+      transition: all 0.15s;
+    }
+
+    .frame-item .remove-btn:hover { color: var(--danger); background: rgba(239, 68, 68, 0.1); }
+
+    .frame-item .track-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: rgba(34, 197, 94, 0.15);
+      color: var(--success);
+      flex-shrink: 0;
+    }
+
+    .actions {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-secondary { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover:not(:disabled) { background: var(--border); }
+    .btn-danger { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
+    .btn-danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.2); }
+
+    .viewer { flex: 1; position: relative; background: var(--bg); }
+    .viewer canvas { display: block; }
+
+    .viewer-overlay {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 10;
+    }
+
+    .viewer-info {
+      background: rgba(26, 29, 39, 0.9);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .viewer-info strong { color: var(--text); }
+
+    .legend {
+      background: rgba(26, 29, 39, 0.9);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+    }
+
+    .legend-title {
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 0;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .legend-item:hover { opacity: 0.8; }
+
+    .legend-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .legend-label { font-size: 12px; color: var(--text); }
+    .legend-count { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+
+    .legend-item.disabled .legend-swatch { opacity: 0.2; }
+    .legend-item.disabled .legend-label { color: var(--text-muted); text-decoration: line-through; }
+
+    .cuboid-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background: var(--surface-2);
+      border-radius: 10px;
+      transition: 0.2s;
+      border: 1px solid var(--border);
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      height: 14px;
+      width: 14px;
+      left: 2px;
+      bottom: 2px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      transition: 0.2s;
+    }
+
+    .toggle-switch input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent); }
+    .toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); background: white; }
+
+    .toggle-label { font-size: 12px; color: var(--text-muted); }
+
+    .playback-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(26, 29, 39, 0.95);
+      backdrop-filter: blur(8px);
+      border-top: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 10;
+    }
+
+    .playback-bar .play-btn {
+      background: var(--accent);
+      border: none;
+      color: white;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+      flex-shrink: 0;
+    }
+    .playback-bar .play-btn:hover { background: var(--accent-hover); }
+    .playback-bar .play-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .timeline {
+      flex: 1;
+      height: 6px;
+      background: var(--surface-2);
+      border-radius: 3px;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .timeline-progress {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width 0.1s;
+    }
+
+    .timeline-markers {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+
+    .timeline-marker { width: 2px; height: 100%; background: rgba(255,255,255,0.15); }
+
+    .playback-bar .frame-label {
+      font-size: 13px;
+      font-weight: 500;
+      min-width: 80px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .playback-bar .speed-control { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+
+    .speed-control select {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      gap: 12px;
+    }
+
+    .empty-state .icon { font-size: 48px; opacity: 0.3; }
+    .empty-state p { font-size: 14px; }
+
+    .download-options { display: flex; gap: 6px; }
+    .download-options .btn { flex: 1; font-size: 13px; padding: 8px 12px; }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      z-index: 1000;
+      transition: transform 0.3s ease;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+    .toast.success { border-color: var(--success); }
+    .toast.error { border-color: var(--danger); }
+
+    .point-size-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .point-size-control label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+    .point-size-control input[type="range"] { flex: 1; accent-color: var(--accent); }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>PCD Frame Concatenator</h1>
+    <span class="badge">LiDAR</span>
+  </header>
+
+  <div class="main-layout">
+    <aside class="sidebar">
+      <div class="sidebar-section">
+        <h2>Cargar Frames</h2>
+        <div class="drop-zone" id="dropZone">
+          <div class="icon">&#x2601;</div>
+          <p>Arrastra archivos .pcd y _track.json</p>
+          <p class="hint">o haz clic para seleccionar</p>
+        </div>
+        <input type="file" id="fileInput" multiple accept=".pcd,.json">
+        <div class="point-size-control">
+          <label>Tam. punto:</label>
+          <input type="range" id="pointSize" min="0.02" max="8" step="0.02" value="1">
+          <span id="pointSizeLabel">1</span>
+        </div>
+        <div class="point-size-control">
+          <label>Color:</label>
+          <select id="colorMode" style="flex:1;background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:6px;font-size:12px;">
+            <option value="height" selected>Altura (Z)</option>
+            <option value="intensity">Intensidad</option>
+            <option value="distance">Distancia al sensor</option>
+            <option value="height_intensity">Altura + Intensidad</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sidebar-section" style="flex-shrink: 0;">
+        <h2>Frames cargados</h2>
+      </div>
+      <div class="frame-list" id="frameList"></div>
+
+      <div class="actions">
+        <div class="download-options">
+          <button class="btn btn-primary" id="downloadMerged" disabled>&#x2B07; Concatenado</button>
+          <button class="btn btn-secondary" id="downloadSeparate" disabled>&#x2B07; Individuales</button>
+        </div>
+        <button class="btn btn-danger" id="clearAll" disabled>Limpiar todo</button>
+      </div>
+    </aside>
+
+    <div class="viewer" id="viewer">
+      <div class="empty-state" id="emptyState">
+        <div class="icon">&#x2B22;</div>
+        <p>Carga archivos .pcd para visualizar</p>
+        <p class="hint" style="font-size:12px;opacity:0.5;">Incluye _track.json para ver bounding boxes</p>
+      </div>
+
+      <div class="viewer-overlay" id="viewerOverlay" style="display:none;">
+        <div class="viewer-info" id="viewerInfo"></div>
+        <div class="legend" id="legendPanel" style="display:none;">
+          <div class="legend-title">Detecciones</div>
+          <div id="legendItems"></div>
+          <div class="cuboid-toggle">
+            <label class="toggle-switch">
+              <input type="checkbox" id="showCuboids" checked>
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label">Mostrar cuboids</span>
+          </div>
+          <div class="cuboid-toggle" style="border-top:none;margin-top:4px;padding-top:0;">
+            <label class="toggle-switch">
+              <input type="checkbox" id="showLabels" checked>
+              <span class="toggle-slider"></span>
+            </label>
+            <span class="toggle-label">Mostrar etiquetas</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="playback-bar" id="playbackBar" style="display:none;">
+        <button class="play-btn" id="playBtn" disabled>&#x25B6;</button>
+        <div class="timeline" id="timeline">
+          <div class="timeline-progress" id="timelineProgress"></div>
+          <div class="timeline-markers" id="timelineMarkers"></div>
+        </div>
+        <span class="frame-label" id="frameLabel">Frame 0 / 0</span>
+        <div class="speed-control">
+          <select id="speedSelect">
+            <option value="2000">0.5x</option>
+            <option value="1000" selected>1x</option>
+            <option value="500">2x</option>
+            <option value="250">4x</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+    const CLASS_COLORS = {
+      'Car':        { hex: 0x3b82f6, css: '#3b82f6' },
+      'Truck':      { hex: 0xf59e0b, css: '#f59e0b' },
+      'Pedestrian': { hex: 0x22c55e, css: '#22c55e' },
+      'Cyclist':    { hex: 0xec4899, css: '#ec4899' },
+      'Bus':        { hex: 0xf97316, css: '#f97316' },
+      'Motorcycle': { hex: 0x14b8a6, css: '#14b8a6' },
+    };
+    const DEFAULT_CLASS_COLOR = { hex: 0xa855f7, css: '#a855f7' };
+
+    function getClassColor(label) {
+      return CLASS_COLORS[label] || DEFAULT_CLASS_COLOR;
+    }
+
+    const state = {
+      frames: [],
+      trackData: {},
+      currentFrame: 0,
+      playing: false,
+      playInterval: null,
+      scene: null,
+      camera: null,
+      renderer: null,
+      labelRenderer: null,
+      controls: null,
+      pointCloud: null,
+      cuboidGroup: null,
+      labelGroup: null,
+      pointSize: 1,
+      showCuboids: true,
+      showLabels: true,
+      disabledClasses: new Set(),
+      colorMode: 'height',
+    };
+
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const frameList = document.getElementById('frameList');
+    const downloadMerged = document.getElementById('downloadMerged');
+    const downloadSeparate = document.getElementById('downloadSeparate');
+    const clearAll = document.getElementById('clearAll');
+    const viewer = document.getElementById('viewer');
+    const emptyState = document.getElementById('emptyState');
+    const viewerOverlay = document.getElementById('viewerOverlay');
+    const viewerInfo = document.getElementById('viewerInfo');
+    const legendPanel = document.getElementById('legendPanel');
+    const legendItems = document.getElementById('legendItems');
+    const playbackBar = document.getElementById('playbackBar');
+    const playBtn = document.getElementById('playBtn');
+    const timeline = document.getElementById('timeline');
+    const timelineProgress = document.getElementById('timelineProgress');
+    const timelineMarkers = document.getElementById('timelineMarkers');
+    const frameLabel = document.getElementById('frameLabel');
+    const speedSelect = document.getElementById('speedSelect');
+    const pointSizeInput = document.getElementById('pointSize');
+    const pointSizeLabel = document.getElementById('pointSizeLabel');
+    const showCuboidsToggle = document.getElementById('showCuboids');
+    const showLabelsToggle = document.getElementById('showLabels');
+    const colorModeSelect = document.getElementById('colorMode');
+    const toast = document.getElementById('toast');
+
+    function showToast(msg, type = 'success') {
+      toast.textContent = msg;
+      toast.className = 'toast ' + type;
+      requestAnimationFrame(() => toast.classList.add('show'));
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    function pcdBaseName(fileName) {
+      return fileName.replace(/\.pcd$/i, '');
+    }
+
+    function trackBaseName(fileName) {
+      return fileName.replace(/_track\.json$/i, '');
+    }
+
+    function parsePCD(text, fileName) {
+      const lines = text.split('\n');
+      let headerEnd = 0;
+      const header = {
+        version: '', fields: [], size: [], type: [], count: [],
+        width: 0, height: 0, viewpoint: '', points: 0, data: 'ascii'
+      };
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('VERSION')) header.version = line.split(/\s+/)[1];
+        else if (line.startsWith('FIELDS')) header.fields = line.split(/\s+/).slice(1);
+        else if (line.startsWith('SIZE')) header.size = line.split(/\s+/).slice(1).map(Number);
+        else if (line.startsWith('TYPE')) header.type = line.split(/\s+/).slice(1);
+        else if (line.startsWith('COUNT')) header.count = line.split(/\s+/).slice(1).map(Number);
+        else if (line.startsWith('WIDTH')) header.width = parseInt(line.split(/\s+/)[1]);
+        else if (line.startsWith('HEIGHT')) header.height = parseInt(line.split(/\s+/)[1]);
+        else if (line.startsWith('VIEWPOINT')) header.viewpoint = line.substring(10).trim();
+        else if (line.startsWith('POINTS')) header.points = parseInt(line.split(/\s+/)[1]);
+        else if (line.startsWith('DATA')) {
+          header.data = line.split(/\s+/)[1].toLowerCase();
+          headerEnd = i + 1;
+          break;
+        }
+      }
+
+      if (header.data !== 'ascii') {
+        throw new Error(`Solo se soporta PCD ASCII (archivo: ${header.data})`);
+      }
+
+      const xIdx = header.fields.indexOf('x');
+      const yIdx = header.fields.indexOf('y');
+      const zIdx = header.fields.indexOf('z');
+      const intensityIdx = header.fields.indexOf('intensity');
+
+      const positions = [];
+      const intensities = [];
+
+      for (let i = headerEnd; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const parts = line.split(/\s+/).map(Number);
+        if (parts.length < 3) continue;
+
+        const x = parts[xIdx !== -1 ? xIdx : 0];
+        const y = parts[yIdx !== -1 ? yIdx : 1];
+        const z = parts[zIdx !== -1 ? zIdx : 2];
+
+        if (x === 0 && y === 0 && z === 0) continue;
+
+        positions.push(x, z, -y);
+        intensities.push(intensityIdx !== -1 ? parts[intensityIdx] : 0);
+      }
+
+      return {
+        fileName,
+        baseName: pcdBaseName(fileName),
+        header,
+        positions: new Float32Array(positions),
+        intensities: new Float32Array(intensities),
+        pointCount: positions.length / 3,
+        rawText: text,
+      };
+    }
+
+    function initThree() {
+      if (state.renderer) return;
+
+      state.scene = new THREE.Scene();
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 2;
+      canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      const gradient = ctx.createLinearGradient(0, 0, 0, 512);
+      gradient.addColorStop(0, '#0a1628');
+      gradient.addColorStop(0.4, '#0d2847');
+      gradient.addColorStop(1, '#1a4a6e');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 2, 512);
+      const bgTexture = new THREE.CanvasTexture(canvas);
+      state.scene.background = bgTexture;
+
+      const rect = viewer.getBoundingClientRect();
+      state.camera = new THREE.PerspectiveCamera(60, rect.width / rect.height, 0.1, 2000);
+      state.camera.position.set(0, 40, -50);
+
+      state.renderer = new THREE.WebGLRenderer({ antialias: true });
+      state.renderer.setSize(rect.width, rect.height);
+      state.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      viewer.appendChild(state.renderer.domElement);
+
+      state.labelRenderer = new CSS2DRenderer();
+      state.labelRenderer.setSize(rect.width, rect.height);
+      state.labelRenderer.domElement.style.position = 'absolute';
+      state.labelRenderer.domElement.style.top = '0';
+      state.labelRenderer.domElement.style.left = '0';
+      state.labelRenderer.domElement.style.pointerEvents = 'none';
+      viewer.appendChild(state.labelRenderer.domElement);
+
+      state.controls = new OrbitControls(state.camera, state.renderer.domElement);
+      state.controls.enableDamping = true;
+      state.controls.dampingFactor = 0.1;
+
+      const gridHelper = new THREE.GridHelper(100, 50, 0x2e3345, 0x1a1d27);
+      state.scene.add(gridHelper);
+
+      const axesHelper = new THREE.AxesHelper(5);
+      state.scene.add(axesHelper);
+
+      function animate() {
+        requestAnimationFrame(animate);
+        state.controls.update();
+        state.renderer.render(state.scene, state.camera);
+        state.labelRenderer.render(state.scene, state.camera);
+      }
+      animate();
+
+      window.addEventListener('resize', () => {
+        const r = viewer.getBoundingClientRect();
+        state.camera.aspect = r.width / r.height;
+        state.camera.updateProjectionMatrix();
+        state.renderer.setSize(r.width, r.height);
+        state.labelRenderer.setSize(r.width, r.height);
+      });
+    }
+
+    function clearCuboids() {
+      if (state.cuboidGroup) {
+        state.cuboidGroup.traverse(child => {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) child.material.dispose();
+        });
+        state.scene.remove(state.cuboidGroup);
+        state.cuboidGroup = null;
+      }
+      if (state.labelGroup) {
+        state.labelGroup.traverse(child => {
+          if (child instanceof CSS2DObject && child.element.parentNode) {
+            child.element.parentNode.removeChild(child.element);
+          }
+        });
+        state.scene.remove(state.labelGroup);
+        state.labelGroup = null;
+      }
+    }
+
+    function renderCuboids(track) {
+      clearCuboids();
+      if (!track || !state.showCuboids) return;
+
+      state.cuboidGroup = new THREE.Group();
+      state.labelGroup = new THREE.Group();
+
+      const cuboids = track.cuboids || [];
+
+      cuboids.forEach(cuboid => {
+        if (state.disabledClasses.has(cuboid.class_label)) return;
+
+        const color = getClassColor(cuboid.class_label);
+        const [cx, cy, cz] = cuboid.location;
+        const [dl, dw, dh] = cuboid.dimensions;
+
+        const geo = new THREE.BoxGeometry(dl, dw, dh);
+        const edges = new THREE.EdgesGeometry(geo);
+        const mat = new THREE.LineBasicMaterial({ color: color.hex, linewidth: 2 });
+        const wireframe = new THREE.LineSegments(edges, mat);
+
+        wireframe.position.set(cx, cz + dh / 2, -cy);
+        wireframe.rotation.y = cuboid.rotation;
+
+        state.cuboidGroup.add(wireframe);
+
+        const faceMat = new THREE.MeshBasicMaterial({
+          color: color.hex,
+          transparent: true,
+          opacity: 0.08,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        });
+        const faceMesh = new THREE.Mesh(new THREE.BoxGeometry(dl, dw, dh), faceMat);
+        faceMesh.position.copy(wireframe.position);
+        faceMesh.rotation.copy(wireframe.rotation);
+        state.cuboidGroup.add(faceMesh);
+
+        if (state.showLabels) {
+          const labelDiv = document.createElement('div');
+          labelDiv.style.cssText = `
+            background: ${color.css}cc;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: -apple-system, system-ui, sans-serif;
+            font-weight: 600;
+            white-space: nowrap;
+            pointer-events: none;
+          `;
+          const conf = (cuboid.confidence * 100).toFixed(0);
+          labelDiv.textContent = `${cuboid.class_label} #${cuboid.obj_id} ${conf}%`;
+
+          const labelObj = new CSS2DObject(labelDiv);
+          labelObj.position.set(cx, cz + dh + 0.5, -cy);
+          state.labelGroup.add(labelObj);
+        }
+      });
+
+      state.scene.add(state.cuboidGroup);
+      state.scene.add(state.labelGroup);
+    }
+
+    function getTrackForFrame(frame) {
+      return state.trackData[frame.baseName] || null;
+    }
+
+    function updateLegend(track) {
+      if (!track) {
+        legendPanel.style.display = 'none';
+        return;
+      }
+      legendPanel.style.display = 'block';
+      legendItems.innerHTML = '';
+
+      const counts = {};
+      (track.cuboids || []).forEach(c => {
+        counts[c.class_label] = (counts[c.class_label] || 0) + 1;
+      });
+
+      Object.entries(counts).sort((a, b) => b[1] - a[1]).forEach(([label, count]) => {
+        const color = getClassColor(label);
+        const disabled = state.disabledClasses.has(label);
+        const item = document.createElement('div');
+        item.className = 'legend-item' + (disabled ? ' disabled' : '');
+        item.innerHTML = `
+          <div class="legend-swatch" style="background:${color.css}"></div>
+          <span class="legend-label">${label}</span>
+          <span class="legend-count">${count}</span>
+        `;
+        item.addEventListener('click', () => {
+          if (state.disabledClasses.has(label)) {
+            state.disabledClasses.delete(label);
+          } else {
+            state.disabledClasses.add(label);
+          }
+          showFrame(state.currentFrame);
+        });
+        legendItems.appendChild(item);
+      });
+    }
+
+    function showFrame(index) {
+      if (index < 0 || index >= state.frames.length) return;
+      state.currentFrame = index;
+
+      const frame = state.frames[index];
+
+      if (state.pointCloud) {
+        state.scene.remove(state.pointCloud);
+        state.pointCloud.geometry.dispose();
+        state.pointCloud.material.dispose();
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(frame.positions, 3));
+
+      const colors = new Float32Array(frame.pointCount * 3);
+
+      let maxIntensity = 0, minY = Infinity, maxY = -Infinity, maxDist = 0;
+      for (let i = 0; i < frame.pointCount; i++) {
+        if (frame.intensities[i] > maxIntensity) maxIntensity = frame.intensities[i];
+        const py = frame.positions[i * 3 + 1];
+        if (py < minY) minY = py;
+        if (py > maxY) maxY = py;
+        const px = frame.positions[i * 3];
+        const pz = frame.positions[i * 3 + 2];
+        const d = Math.sqrt(px * px + py * py + pz * pz);
+        if (d > maxDist) maxDist = d;
+      }
+      if (maxIntensity === 0) maxIntensity = 1;
+      const rangeY = maxY - minY || 1;
+      if (maxDist === 0) maxDist = 1;
+
+      function turboColormap(input) {
+        const t = 0.15 + input * 0.7;
+        const r = Math.max(0, Math.min(1, 0.13572 + t * (4.6153 + t * (-42.66 + t * (132.13 + t * (-152.95 + t * 56.67))))));
+        const g = Math.max(0, Math.min(1, 0.09140 + t * (2.1896 + t * (-14.66 + t * (53.20 + t * (-86.54 + t * 48.70))))));
+        const b = Math.max(0, Math.min(1, 0.10667 + t * (12.989 + t * (-60.58 + t * (132.16 + t * (-152.85 + t * 67.16))))));
+        return [r, g, b];
+      }
+
+      const intensitiesSorted = Array.from(frame.intensities).filter(v => v > 0).sort((a, b) => a - b);
+      const p05 = intensitiesSorted[Math.floor(intensitiesSorted.length * 0.05)] || 0;
+      const p95 = intensitiesSorted[Math.floor(intensitiesSorted.length * 0.95)] || maxIntensity;
+      const intRange = p95 - p05 || 1;
+
+      for (let i = 0; i < frame.pointCount; i++) {
+        let t;
+        const mode = state.colorMode;
+        if (mode === 'height') {
+          t = (frame.positions[i * 3 + 1] - minY) / rangeY;
+        } else if (mode === 'intensity') {
+          t = Math.max(0, Math.min(1, (frame.intensities[i] - p05) / intRange));
+          t = Math.pow(t, 0.5);
+        } else if (mode === 'distance') {
+          const px = frame.positions[i * 3];
+          const py = frame.positions[i * 3 + 1];
+          const pz = frame.positions[i * 3 + 2];
+          t = Math.sqrt(px * px + py * py + pz * pz) / maxDist;
+        } else {
+          const hNorm = (frame.positions[i * 3 + 1] - minY) / rangeY;
+          const rawI = Math.max(0, Math.min(1, (frame.intensities[i] - p05) / intRange));
+          t = hNorm * 0.6 + Math.pow(rawI, 0.5) * 0.4;
+        }
+        const [r, g, b] = turboColormap(t);
+        colors[i * 3] = r;
+        colors[i * 3 + 1] = g;
+        colors[i * 3 + 2] = b;
+      }
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      const material = new THREE.PointsMaterial({
+        size: state.pointSize,
+        vertexColors: true,
+        sizeAttenuation: true,
+      });
+
+      state.pointCloud = new THREE.Points(geometry, material);
+      state.scene.add(state.pointCloud);
+
+      const track = getTrackForFrame(frame);
+      renderCuboids(track);
+      updateLegend(track);
+
+      const trackInfo = track
+        ? `<strong>${track.num_objects}</strong> objetos detectados`
+        : '<span style="opacity:0.5">Sin track JSON</span>';
+
+      viewerInfo.innerHTML = `
+        <strong>Frame ${index + 1} / ${state.frames.length}</strong><br>
+        ${frame.fileName}<br>
+        <strong>${frame.pointCount.toLocaleString()}</strong> puntos<br>
+        ${trackInfo}
+      `;
+
+      frameLabel.textContent = `Frame ${index + 1} / ${state.frames.length}`;
+
+      const pct = state.frames.length > 1
+        ? (index / (state.frames.length - 1)) * 100
+        : 100;
+      timelineProgress.style.width = pct + '%';
+
+      document.querySelectorAll('.frame-item').forEach((el, i) => {
+        el.classList.toggle('active', i === index);
+      });
+    }
+
+    function renderFrameList() {
+      frameList.innerHTML = '';
+      state.frames.forEach((frame, i) => {
+        const el = document.createElement('div');
+        el.className = 'frame-item' + (i === state.currentFrame ? ' active' : '');
+        el.draggable = true;
+        el.dataset.index = i;
+
+        const hasTrack = !!state.trackData[frame.baseName];
+        const trackBadge = hasTrack ? '<span class="track-badge">TRACK</span>' : '';
+
+        el.innerHTML = `
+          <span class="drag-handle">&#x2630;</span>
+          <span class="frame-index">${i + 1}</span>
+          <div class="frame-info">
+            <div class="frame-name" title="${frame.fileName}">${frame.fileName}</div>
+            <div class="frame-meta">${frame.pointCount.toLocaleString()} puntos &middot; ${frame.header.fields.join(', ')}</div>
+          </div>
+          ${trackBadge}
+          <button class="remove-btn" title="Eliminar">&times;</button>
+        `;
+
+        el.querySelector('.remove-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          state.frames.splice(i, 1);
+          if (state.currentFrame >= state.frames.length) {
+            state.currentFrame = Math.max(0, state.frames.length - 1);
+          }
+          updateUI();
+        });
+
+        el.addEventListener('click', () => showFrame(i));
+
+        el.addEventListener('dragstart', (e) => {
+          e.dataTransfer.setData('text/plain', i);
+          el.classList.add('dragging');
+        });
+        el.addEventListener('dragend', () => el.classList.remove('dragging'));
+        el.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+        el.addEventListener('drop', (e) => {
+          e.preventDefault();
+          const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+          const toIndex = i;
+          if (fromIndex === toIndex) return;
+          const [moved] = state.frames.splice(fromIndex, 1);
+          state.frames.splice(toIndex, 0, moved);
+          if (state.currentFrame === fromIndex) state.currentFrame = toIndex;
+          updateUI();
+        });
+
+        frameList.appendChild(el);
+      });
+
+      timelineMarkers.innerHTML = '';
+      if (state.frames.length > 1) {
+        for (let i = 0; i < state.frames.length; i++) {
+          const marker = document.createElement('div');
+          marker.className = 'timeline-marker';
+          timelineMarkers.appendChild(marker);
+        }
+      }
+    }
+
+    function updateUI() {
+      const hasFrames = state.frames.length > 0;
+
+      downloadMerged.disabled = state.frames.length < 2;
+      downloadSeparate.disabled = !hasFrames;
+      clearAll.disabled = !hasFrames;
+      playBtn.disabled = state.frames.length < 2;
+
+      emptyState.style.display = hasFrames ? 'none' : 'flex';
+      viewerOverlay.style.display = hasFrames ? 'flex' : 'none';
+      playbackBar.style.display = hasFrames ? 'flex' : 'none';
+
+      renderFrameList();
+
+      if (hasFrames) {
+        initThree();
+        showFrame(Math.min(state.currentFrame, state.frames.length - 1));
+      } else {
+        clearCuboids();
+        if (state.pointCloud) {
+          state.scene.remove(state.pointCloud);
+          state.pointCloud.geometry.dispose();
+          state.pointCloud.material.dispose();
+          state.pointCloud = null;
+        }
+        legendPanel.style.display = 'none';
+      }
+    }
+
+    async function handleFiles(files) {
+      const allFiles = Array.from(files);
+      const pcdFiles = allFiles.filter(f => f.name.toLowerCase().endsWith('.pcd'));
+      const jsonFiles = allFiles.filter(f => f.name.toLowerCase().endsWith('_track.json'));
+
+      let loadedPcd = 0;
+      let loadedJson = 0;
+
+      for (const file of jsonFiles) {
+        try {
+          const text = await file.text();
+          const data = JSON.parse(text);
+          const base = trackBaseName(file.name);
+          state.trackData[base] = data;
+          loadedJson++;
+        } catch (err) {
+          showToast(`Error JSON ${file.name}: ${err.message}`, 'error');
+        }
+      }
+
+      for (const file of pcdFiles) {
+        try {
+          const text = await file.text();
+          const frame = parsePCD(text, file.name);
+          state.frames.push(frame);
+          loadedPcd++;
+        } catch (err) {
+          showToast(`Error PCD ${file.name}: ${err.message}`, 'error');
+        }
+      }
+
+      if (pcdFiles.length === 0 && jsonFiles.length === 0) {
+        showToast('No se encontraron archivos .pcd o _track.json', 'error');
+        return;
+      }
+
+      const parts = [];
+      if (loadedPcd > 0) parts.push(`${loadedPcd} PCD`);
+      if (loadedJson > 0) parts.push(`${loadedJson} track JSON`);
+      if (parts.length > 0) {
+        showToast(parts.join(' + ') + ' cargado(s)');
+        updateUI();
+      }
+    }
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      handleFiles(e.dataTransfer.files);
+    });
+    fileInput.addEventListener('change', () => {
+      handleFiles(fileInput.files);
+      fileInput.value = '';
+    });
+
+    clearAll.addEventListener('click', () => {
+      stopPlayback();
+      state.frames = [];
+      state.trackData = {};
+      state.currentFrame = 0;
+      state.disabledClasses.clear();
+      updateUI();
+      showToast('Todo eliminado');
+    });
+
+    showCuboidsToggle.addEventListener('change', () => {
+      state.showCuboids = showCuboidsToggle.checked;
+      showFrame(state.currentFrame);
+    });
+
+    showLabelsToggle.addEventListener('change', () => {
+      state.showLabels = showLabelsToggle.checked;
+      showFrame(state.currentFrame);
+    });
+
+    colorModeSelect.addEventListener('change', () => {
+      state.colorMode = colorModeSelect.value;
+      showFrame(state.currentFrame);
+    });
+
+    function generateConcatenatedPCD() {
+      const allFrames = state.frames;
+      if (allFrames.length === 0) return '';
+
+      const ref = allFrames[0].header;
+      let totalPoints = 0;
+      allFrames.forEach(f => totalPoints += f.pointCount);
+
+      const hasIntensity = ref.fields.includes('intensity');
+      const fields = hasIntensity ? 'FIELDS x y z intensity frame_index' : 'FIELDS x y z frame_index';
+      const size = hasIntensity ? 'SIZE 4 4 4 4 4' : 'SIZE 4 4 4 4';
+      const type = hasIntensity ? 'TYPE F F F F U' : 'TYPE F F F U';
+      const count = hasIntensity ? 'COUNT 1 1 1 1 1' : 'COUNT 1 1 1 1';
+
+      const headerLines = [
+        '# .PCD v0.7 - Point Cloud Data file format',
+        'VERSION 0.7',
+        fields, size, type, count,
+        `WIDTH ${totalPoints}`,
+        'HEIGHT 1',
+        `VIEWPOINT ${ref.viewpoint || '0 0 0 1 0 0 0'}`,
+        `POINTS ${totalPoints}`,
+        'DATA ascii'
+      ];
+
+      const dataLines = [];
+      allFrames.forEach((frame, frameIdx) => {
+        for (let i = 0; i < frame.pointCount; i++) {
+          const x = frame.positions[i * 3].toFixed(6);
+          const y = frame.positions[i * 3 + 1].toFixed(6);
+          const z = frame.positions[i * 3 + 2].toFixed(6);
+          if (hasIntensity) {
+            const intensity = frame.intensities[i].toFixed(6);
+            dataLines.push(`${x} ${y} ${z} ${intensity} ${frameIdx}`);
+          } else {
+            dataLines.push(`${x} ${y} ${z} ${frameIdx}`);
+          }
+        }
+      });
+
+      return headerLines.join('\n') + '\n' + dataLines.join('\n') + '\n';
+    }
+
+    function downloadText(content, filename) {
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    downloadMerged.addEventListener('click', () => {
+      const pcd = generateConcatenatedPCD();
+      downloadText(pcd, 'concatenated_frames.pcd');
+      showToast(`PCD concatenado (${state.frames.length} frames)`);
+    });
+
+    downloadSeparate.addEventListener('click', () => {
+      state.frames.forEach((frame, i) => {
+        downloadText(frame.rawText, `frame_${String(i).padStart(3, '0')}_${frame.fileName}`);
+      });
+      showToast(`${state.frames.length} archivo(s) descargado(s)`);
+    });
+
+    function stopPlayback() {
+      state.playing = false;
+      clearInterval(state.playInterval);
+      playBtn.innerHTML = '&#x25B6;';
+    }
+
+    playBtn.addEventListener('click', () => {
+      if (state.playing) {
+        stopPlayback();
+      } else {
+        state.playing = true;
+        playBtn.innerHTML = '&#x23F8;';
+        state.playInterval = setInterval(() => {
+          const next = (state.currentFrame + 1) % state.frames.length;
+          showFrame(next);
+        }, parseInt(speedSelect.value));
+      }
+    });
+
+    speedSelect.addEventListener('change', () => {
+      if (state.playing) {
+        clearInterval(state.playInterval);
+        state.playInterval = setInterval(() => {
+          const next = (state.currentFrame + 1) % state.frames.length;
+          showFrame(next);
+        }, parseInt(speedSelect.value));
+      }
+    });
+
+    timeline.addEventListener('click', (e) => {
+      if (state.frames.length < 2) return;
+      const rect = timeline.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      const idx = Math.round(pct * (state.frames.length - 1));
+      showFrame(idx);
+    });
+
+    pointSizeInput.addEventListener('input', () => {
+      state.pointSize = parseFloat(pointSizeInput.value);
+      pointSizeLabel.textContent = state.pointSize;
+      if (state.pointCloud) {
+        state.pointCloud.material.size = state.pointSize;
+      }
+    });
+
+    updateUI();
+  </script>
+</body>
+</html>
