@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/", "destination": "/pcd_concatenator.html" }
+  ]
+}
